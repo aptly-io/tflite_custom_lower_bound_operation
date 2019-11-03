@@ -25,53 +25,11 @@ namespace tflite {
 namespace custom {
 namespace smartreply {
 
-const int kDefaultNumResponse = 10;
-const float kDefaultBackoffConfidence = 1e-4;
+void GetScores(
+    const std::vector<float>& input,
+    const ::tflite::FlatBufferModel& model, 
+    std::vector<float>* scores) ;
 
-class PredictorResponse;
-struct SmartReplyConfig;
-
-// With a given string as input, predict the response with a Tflite model.
-// When config.backoff_response is not empty, predictor_responses will be filled
-// with messagees from backoff response.
-void GetSegmentPredictions(const std::vector<std::string>& input,
-                           const ::tflite::FlatBufferModel& model,
-                           const SmartReplyConfig& config,
-                           std::vector<PredictorResponse>* predictor_responses);
-
-// Data object used to hold a single predictor response.
-// It includes messages, and confidence.
-class PredictorResponse {
- public:
-  PredictorResponse(const std::string& response_text, float score) {
-    response_text_ = response_text;
-    prediction_score_ = score;
-  }
-
-  // Accessor methods.
-  const std::string& GetText() const { return response_text_; }
-  float GetScore() const { return prediction_score_; }
-
- private:
-  std::string response_text_ = "";
-  float prediction_score_ = 0.0;
-};
-
-// Configurations for SmartReply.
-struct SmartReplyConfig {
-  // Maximum responses to return.
-  int num_response;
-  // Default confidence for backoff responses.
-  float backoff_confidence;
-  // Backoff responses are used when predicted responses cannot fulfill the
-  // list.
-  std::vector<std::string> backoff_responses;
-
-  SmartReplyConfig(const std::vector<std::string>& backoff_responses)
-      : num_response(kDefaultNumResponse),
-        backoff_confidence(kDefaultBackoffConfidence),
-        backoff_responses(backoff_responses) {}
-};
 
 }  // namespace smartreply
 }  // namespace custom

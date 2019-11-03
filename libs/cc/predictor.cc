@@ -15,13 +15,11 @@ limitations under the License.
 
 #include "libs/cc/predictor.h"
 
-#include "absl/strings/str_split.h"
-#include "re2/re2.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/op_resolver.h"
-#include "tensorflow/lite/string_util.h"
+#include "tensorflow/lite/minimal_logging.h"
 
 void RegisterSelectedOps(::tflite::MutableOpResolver* resolver);
 
@@ -29,86 +27,37 @@ namespace tflite {
 namespace custom {
 namespace smartreply {
 
-// Split sentence into segments (using punctuation).
-std::vector<std::string> SplitSentence(const std::string& input) {
-  string result(input);
-
-  RE2::GlobalReplace(&result, "([?.!,])+", " \\1");
-  RE2::GlobalReplace(&result, "([?.!,])+\\s+", "\\1\t");
-  RE2::GlobalReplace(&result, "[ ]+", " ");
-  RE2::GlobalReplace(&result, "\t+$", "");
-
-  return absl::StrSplit(result, '\t');
-}
-
-// Predict with TfLite model.
-void ExecuteTfLite(const std::string& sentence,
-                   ::tflite::Interpreter* interpreter,
-                   std::map<std::string, float>* response_map) {
-  {
-    TfLiteTensor* input = interpreter->tensor(interpreter->inputs()[0]);
-    tflite::DynamicBuffer buf;
-    buf.AddString(sentence.data(), sentence.length());
-    buf.WriteToTensorAsVector(input);
-    interpreter->AllocateTensors();
-
-    interpreter->Invoke();
-
-    TfLiteTensor* messages = interpreter->tensor(interpreter->outputs()[0]);
-    TfLiteTensor* confidence = interpreter->tensor(interpreter->outputs()[1]);
-
-    for (int i = 0; i < confidence->dims->data[0]; i++) {
-      float weight = confidence->data.f[i];
-      auto response_text = tflite::GetString(messages, i);
-      if (response_text.len > 0) {
-        (*response_map)[string(response_text.str, response_text.len)] += weight;
-      }
-    }
-  }
-}
-
-void GetSegmentPredictions(
-    const std::vector<std::string>& input,
-    const ::tflite::FlatBufferModel& model, const SmartReplyConfig& config,
-    std::vector<PredictorResponse>* predictor_responses) {
-  // Initialize interpreter
+void GetScores(
+    const std::vector<float>& input,
+    const ::tflite::FlatBufferModel& model, 
+    std::vector<float>* scores) 
+{
   std::unique_ptr<::tflite::Interpreter> interpreter;
   ::tflite::MutableOpResolver resolver;
   RegisterSelectedOps(&resolver);
   ::tflite::InterpreterBuilder(model, resolver)(&interpreter);
 
   if (!model.initialized()) {
-    fprintf(stderr, "Failed to mmap model \n");
+    fprintf(stderr, "Failed to mmap model\n");
     return;
   }
 
-  // Execute Tflite Model
-  std::map<std::string, float> response_map;
-  std::vector<std::string> sentences;
-  for (const std::string& str : input) {
-    std::vector<std::string> splitted_str = SplitSentence(str);
-    sentences.insert(sentences.end(), splitted_str.begin(), splitted_str.end());
-  }
-  for (const auto& sentence : sentences) {
-    ExecuteTfLite(sentence, interpreter.get(), &response_map);
+  const std::vector<int> dims = { 3 };
+  interpreter->ResizeInputTensor(0, dims); // note if not resizing, input_tensor->data.f will be a nullptr
+  
+  interpreter->AllocateTensors(); // note if not calling, Invoke() fails with a not ready error
+
+  TfLiteTensor* input_tensor = interpreter->tensor(interpreter->inputs()[0]);
+  for (int i = 0; i < input_tensor->dims->data[0]; ++i) {
+    input_tensor->data.f[i] = input[i];
   }
 
-  // Generate the result.
-  for (const auto& iter : response_map) {
-    PredictorResponse prediction(iter.first, iter.second);
-    predictor_responses->emplace_back(prediction);
-  }
-  std::sort(predictor_responses->begin(), predictor_responses->end(),
-            [](const PredictorResponse& a, const PredictorResponse& b) {
-              return a.GetScore() > b.GetScore();
-            });
+  interpreter->Invoke();
 
-  // Add backoff response.
-  for (const auto& backoff : config.backoff_responses) {
-    if (predictor_responses->size() >= config.num_response) {
-      break;
-    }
-    predictor_responses->emplace_back(backoff, config.backoff_confidence);
+  TfLiteTensor* output_tensor = interpreter->tensor(interpreter->outputs()[0]);
+
+  for (int i = 0; i < output_tensor->dims->data[0]; i++) {
+    scores->emplace_back(output_tensor->data.i32[i]);
   }
 }
 

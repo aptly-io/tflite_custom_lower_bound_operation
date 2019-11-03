@@ -16,26 +16,24 @@ load("@org_tensorflow//tensorflow/lite/java:aar_with_jni.bzl", "aar_with_jni")
 
 gen_selected_ops(
     name = "smartreply_ops",
-    model = "//libs/cc/testdata:smartreply.tflite",
+    # adds the necessary operators to the OpResolver
+    model = [
+        # "//libs/cc/testdata:smartreply.tflite", 
+        "//libs/cc/testdata:fm_search_scores.tflite"
+        ]
 )
 
 cc_library(
     name = "custom_ops",
     srcs = [
-        "ops/extract_feature.cc",
-        "ops/normalize.cc",
-        "ops/predict.cc",
+        "ops/lower_bound.cc",
         ":smartreply_ops",
     ],
     copts = tflite_copts(),
     deps = [
         "@org_tensorflow//tensorflow/lite:framework",
-        "@org_tensorflow//tensorflow/lite:string_util",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
         "@org_tensorflow//tensorflow/lite/kernels:kernel_util",
-        "@com_google_absl//absl/strings",
-        "@com_googlesource_code_re2//:re2",
-        "@farmhash_archive//:farmhash",
     ],
     alwayslink = 1,
 )
@@ -48,76 +46,73 @@ cc_library(
     deps = [
         ":custom_ops",
         "@org_tensorflow//tensorflow/lite:framework",
-        "@org_tensorflow//tensorflow/lite:string_util",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
-        "@com_google_absl//absl/strings",
-        "@com_googlesource_code_re2//:re2",
     ],
 )
 
 # TODO(b/118895218): Make this test compatible with oss.
-tf_cc_test(
-    name = "predictor_test",
-    srcs = ["predictor_test.cc"],
-    data = [
-        "//libs/cc/testdata:smartreply.tflite",
-        "//libs/cc/testdata:smartreply_samples.tsv",
-    ],
-    tags = ["no_oss"],
-    deps = [
-        ":predictor_lib",
-        "@org_tensorflow//tensorflow/core:test",
-        "@org_tensorflow//tensorflow/lite:string_util",
-        "@org_tensorflow//tensorflow/lite/testing:util",
-        "@com_google_absl//absl/strings",
-        "@com_google_googletest//:gtest",
-    ],
-)
+# tf_cc_test(
+#     name = "predictor_test",
+#     srcs = ["predictor_test.cc"],
+#     data = [
+#         "//libs/cc/testdata:smartreply.tflite",
+#         "//libs/cc/testdata:smartreply_samples.tsv",
+#     ],
+#     tags = ["no_oss"],
+#     deps = [
+#         ":predictor_lib",
+#         "@org_tensorflow//tensorflow/core:test",
+#         "@org_tensorflow//tensorflow/lite:string_util",
+#         "@org_tensorflow//tensorflow/lite/testing:util",
+#         "@com_google_absl//absl/strings",
+#         "@com_google_googletest//:gtest",
+#     ],
+# )
 
-cc_test(
-    name = "extract_feature_op_test",
-    size = "small",
-    srcs = ["ops/extract_feature_test.cc"],
-    tags = ["no_oss"],
-    deps = [
-        ":custom_ops",
-        "@org_tensorflow//tensorflow/lite:framework",
-        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
-        "@org_tensorflow//tensorflow/lite/kernels:test_util",
-        "@com_google_googletest//:gtest",
-        "@farmhash_archive//:farmhash",
-    ],
-)
+# cc_test(
+#     name = "extract_feature_op_test",
+#     size = "small",
+#     srcs = ["ops/extract_feature_test.cc"],
+#     tags = ["no_oss"],
+#     deps = [
+#         ":custom_ops",
+#         "@org_tensorflow//tensorflow/lite:framework",
+#         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
+#         "@org_tensorflow//tensorflow/lite/kernels:test_util",
+#         "@com_google_googletest//:gtest",
+#         "@farmhash_archive//:farmhash",
+#     ],
+# )
 
-cc_test(
-    name = "normalize_op_test",
-    size = "small",
-    srcs = ["ops/normalize_test.cc"],
-    tags = ["no_oss"],
-    deps = [
-        ":custom_ops",
-        "@org_tensorflow//tensorflow/lite:framework",
-        "@org_tensorflow//tensorflow/lite:string_util",
-        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
-        "@org_tensorflow//tensorflow/lite/kernels:test_util",
-        "@com_google_googletest//:gtest",
-    ],
-)
+# cc_test(
+#     name = "normalize_op_test",
+#     size = "small",
+#     srcs = ["ops/normalize_test.cc"],
+#     tags = ["no_oss"],
+#     deps = [
+#         ":custom_ops",
+#         "@org_tensorflow//tensorflow/lite:framework",
+#         "@org_tensorflow//tensorflow/lite:string_util",
+#         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
+#         "@org_tensorflow//tensorflow/lite/kernels:test_util",
+#         "@com_google_googletest//:gtest",
+#     ],
+# )
 
-cc_test(
-    name = "predict_op_test",
-    size = "small",
-    srcs = ["ops/predict_test.cc"],
-    tags = ["no_oss"],
-    deps = [
-        ":custom_ops",
-        "@org_tensorflow//tensorflow/lite:framework",
-        "@org_tensorflow//tensorflow/lite:string_util",
-        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
-        "@org_tensorflow//tensorflow/lite/kernels:test_util",
-        "@com_google_googletest//:gtest",
-    ],
-)
+# cc_test(
+#     name = "predict_op_test",
+#     size = "small",
+#     srcs = ["ops/predict_test.cc"],
+#     tags = ["no_oss"],
+#     deps = [
+#         ":custom_ops",
+#         "@org_tensorflow//tensorflow/lite:framework",
+#         "@org_tensorflow//tensorflow/lite:string_util",
+#         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
+#         "@org_tensorflow//tensorflow/lite/kernels:test_util",
+#         "@com_google_googletest//:gtest",
+#     ],
+# )
 
 cc_library(
     name = "smartreply_jni_lib",

@@ -23,8 +23,11 @@ limitations under the License.
 const char kIllegalStateException[] = "java/lang/IllegalStateException";
 const char kSmartReply[] = "org/tensorflow/lite/examples/smartreply/SmartReply";
 
-using tflite::custom::smartreply::GetSegmentPredictions;
-using tflite::custom::smartreply::PredictorResponse;
+using tflite::custom::smartreply::GetScores;
+
+struct JNIStorage {
+  std::unique_ptr<::tflite::FlatBufferModel> model;
+};
 
 template <typename T>
 T CheckNotNull(JNIEnv* env, T&& t) {
@@ -35,29 +38,9 @@ T CheckNotNull(JNIEnv* env, T&& t) {
   return std::forward<T>(t);
 }
 
-std::vector<std::string> jniStringArrayToVector(JNIEnv* env,
-                                                jobjectArray string_array) {
-  int count = env->GetArrayLength(string_array);
-  std::vector<std::string> result;
-  for (int i = 0; i < count; i++) {
-    auto jstr =
-        reinterpret_cast<jstring>(env->GetObjectArrayElement(string_array, i));
-    const char* raw_str = env->GetStringUTFChars(jstr, JNI_FALSE);
-    result.emplace_back(std::string(raw_str));
-    env->ReleaseStringUTFChars(jstr, raw_str);
-  }
-  return result;
-}
-
-struct JNIStorage {
-  std::vector<std::string> backoff_list;
-  std::unique_ptr<::tflite::FlatBufferModel> model;
-};
-
 extern "C" JNIEXPORT jlong JNICALL
 Java_org_tensorflow_lite_examples_smartreply_SmartReplyClient_loadJNI(
-    JNIEnv* env, jobject thiz, jobject model_buffer,
-    jobjectArray backoff_list) {
+    JNIEnv* env, jobject thiz, jobject model_buffer) {
   const char* buf =
       static_cast<char*>(env->GetDirectBufferAddress(model_buffer));
   jlong capacity = env->GetDirectBufferCapacity(model_buffer);
@@ -65,7 +48,6 @@ Java_org_tensorflow_lite_examples_smartreply_SmartReplyClient_loadJNI(
   JNIStorage* storage = new JNIStorage;
   storage->model = tflite::FlatBufferModel::BuildFromBuffer(
       buf, static_cast<size_t>(capacity));
-  storage->backoff_list = jniStringArrayToVector(env, backoff_list);
 
   if (!storage->model) {
     delete storage;
@@ -75,10 +57,9 @@ Java_org_tensorflow_lite_examples_smartreply_SmartReplyClient_loadJNI(
   return reinterpret_cast<jlong>(storage);
 }
 
-extern "C" JNIEXPORT jobjectArray JNICALL
+extern "C" JNIEXPORT jfloatArray JNICALL
 Java_org_tensorflow_lite_examples_smartreply_SmartReplyClient_predictJNI(
-    JNIEnv* env, jobject /*thiz*/, jlong storage_ptr, jobjectArray input_text) {
-  // Predict
+    JNIEnv* env, jobject /*thiz*/, jlong storage_ptr, jfloatArray averages) {
   if (storage_ptr == 0) {
     return nullptr;
   }
@@ -86,36 +67,23 @@ Java_org_tensorflow_lite_examples_smartreply_SmartReplyClient_predictJNI(
   if (storage == nullptr) {
     return nullptr;
   }
-  std::vector<PredictorResponse> responses;
-  GetSegmentPredictions(jniStringArrayToVector(env, input_text),
-                        *storage->model, {storage->backoff_list}, &responses);
 
-  // Create a SmartReply[] to return back to Java
-  jclass smart_reply_class = CheckNotNull(env, env->FindClass(kSmartReply));
-  if (env->ExceptionCheck()) {
-    return nullptr;
+  const jfloat* p = env->GetFloatArrayElements(averages, 0);
+  const jsize count = env->GetArrayLength(averages);
+  std::vector<float> average_scores;
+  average_scores.reserve(count);
+  for (int i = 0; i < count; ++i) {
+    average_scores.emplace_back(*p++);
   }
-  jmethodID smart_reply_ctor = CheckNotNull(
-      env,
-      env->GetMethodID(smart_reply_class, "<init>", "(Ljava/lang/String;F)V"));
-  if (env->ExceptionCheck()) {
-    return nullptr;
+
+  std::vector<float> scores;
+  GetScores(average_scores, *storage->model, &scores);
+
+  jfloatArray array = CheckNotNull(env, env->NewFloatArray(scores.size()));
+  for (int i = 0; i < scores.size(); ++i) {
+    env->SetFloatArrayRegion(array, i, 1, &scores[i]);
   }
-  jobjectArray array = CheckNotNull(
-      env, env->NewObjectArray(responses.size(), smart_reply_class, nullptr));
-  if (env->ExceptionCheck()) {
-    return nullptr;
-  }
-  for (int i = 0; i < responses.size(); i++) {
-    jstring text =
-        CheckNotNull(env, env->NewStringUTF(responses[i].GetText().data()));
-    if (env->ExceptionCheck()) {
-      return nullptr;
-    }
-    jobject reply = env->NewObject(smart_reply_class, smart_reply_ctor, text,
-                                   responses[i].GetScore());
-    env->SetObjectArrayElement(array, i, reply);
-  }
+
   return array;
 }
 
