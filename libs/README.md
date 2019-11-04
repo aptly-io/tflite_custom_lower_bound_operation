@@ -1,5 +1,26 @@
-Based on Google's example for custom operations.
-See here https://github.com/tensorflow/examples/tree/master/lite/examples/smart_reply
+# Tensorflow lite custom operator #
+
+Experiment with a custom operation (LowerBound),
+to make searchsorted(side='left') work in a tensorflow lite model on android.
+
+It's based on Google's example for custom operations.
+See here https://github.com/tensorflow/examples/tree/master/lite/examples/smart_reply.
+
+To try, checkout this repo and tensorflow examples repo.
+Then run the Bazel build and copy the result into the tensorflow example.
+
+```bash
+git clone https://github.com/aptly-io/tflite_custom_lower_bound_operation.git
+cd tflite_custom_lower_bound_operation
+# Build A JNI layer to load a tflite model,
+# a c++ layer to call tensorflow lite,
+# the custom operator implementation in a AAR
+bazel build libs/cc:smartreply_runtime_aar
+# Move the custom build tensorflow lite AAR into the Android app
+cp bazel-bin//libs/cc/smartreply_runtime_aar.aar ../tensorflow_examples/lite/examples/smart_reply/android/app/libs/smartreply_runtime_aar.aar
+# Move the model using searchsorted into the Android app assets
+cp libs/cc/testdata/fm_search_scores.tflite ../tensorflow_examples/lite/examples/smart_reply/android/app/src/main/assets/
+```
 
 Just the relevant subset of libs/cc is used.
 The android java-code is brutally changed like this:
