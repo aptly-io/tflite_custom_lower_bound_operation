@@ -6,6 +6,10 @@ to make searchsorted(side='left') work in a tensorflow lite model on android.
 It's based on Google's example for custom operations.
 See here https://github.com/tensorflow/examples/tree/master/lite/examples/smart_reply.
 
+The difference of library size is substantial:
+- the default tensorflow-lite-0.0.0-nightly.aar contains a jni/armeabi-v7a/libtensorflowlite_jni.so of 1.6Mb
+- the custom build variant that only uses the operators effectively used in the model: 382K
+
 To try, checkout this repo and tensorflow examples repo.
 Then run the Bazel build and copy the result into the tensorflow example.
 
